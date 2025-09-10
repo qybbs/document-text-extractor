@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pytesseract
+pillow
+pdfplumber
+python-multipart
+python-docx
+openpyxl
+python-pptx

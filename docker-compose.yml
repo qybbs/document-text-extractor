@@ -1,0 +1,11 @@
+services:
+  document-extractor:
+    build: .
+    container_name: document-extractor
+    ports:
+      - "8000:8000"
+    environment:
+      TESSERACT_CMD: "/usr/bin/tesseract"
+    volumes:
+      - ./app:/app/app
+    restart: unless-stopped
