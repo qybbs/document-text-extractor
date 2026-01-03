@@ -1,4 +1,7 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import pytesseract
 from PIL import Image
 import pdfplumber
@@ -10,7 +13,46 @@ from pptx import Presentation
 
 app = FastAPI(title="Document Text Extractor API")
 
+# CORS Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_CMD", "tesseract")
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# File size configuration (in MB)
+MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "50"))
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
+
+async def validate_file_size(file: UploadFile = File(...)):
+    """Validate file size before processing"""
+    # Read file to check size
+    content = await file.read()
+    file_size = len(content)
+    
+    if file_size > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File size ({file_size / (1024 * 1024):.2f} MB) exceeds maximum allowed size ({MAX_FILE_SIZE_MB} MB)"
+        )
+    
+    # Reset file pointer for subsequent reading
+    await file.seek(0)
+    return file
+
+
+@app.get("/")
+async def root():
+    """Serve the UI"""
+    return FileResponse("static/index.html")
 
 
 @app.get("/health")
@@ -19,8 +61,17 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/config")
+async def get_config():
+    """Get configuration settings"""
+    return {
+        "max_file_size_bytes": MAX_FILE_SIZE_BYTES,
+        "max_file_size_mb": MAX_FILE_SIZE_MB
+    }
+
+
 @app.post("/extract/pdf")
-async def extract_pdf(file: UploadFile = File(...)):
+async def extract_pdf(file: UploadFile = Depends(validate_file_size)):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Invalid file format, expected PDF")
 
@@ -44,7 +95,7 @@ async def extract_pdf(file: UploadFile = File(...)):
 
 
 @app.post("/extract/image")
-async def extract_image(file: UploadFile = File(...)):
+async def extract_image(file: UploadFile = Depends(validate_file_size)):
     if file.content_type not in [
         "image/jpeg", "image/png", "image/jpg", "image/gif", "image/webp"
     ]:
@@ -61,7 +112,7 @@ async def extract_image(file: UploadFile = File(...)):
 
 
 @app.post("/extract/office")
-async def extract_office(file: UploadFile = File(...)):
+async def extract_office(file: UploadFile = Depends(validate_file_size)):
     ext = file.filename.split(".")[-1].lower()
     file_bytes = await file.read()
     buffer = io.BytesIO(file_bytes)

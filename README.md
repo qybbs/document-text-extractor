@@ -8,9 +8,12 @@ A powerful FastAPI-based service for extracting text from various document forma
 - **Image OCR**: Extract text from images using Tesseract OCR engine
 - **Office Document Support**: Extract text from Microsoft Office documents (Word, Excel, PowerPoint)
 - **Multiple Image Formats**: Support for JPEG, PNG, GIF, WebP image formats
+- **Web UI**: User-friendly drag-and-drop interface for easy document uploads
+- **File Size Limits**: Configurable file size validation (default 50MB)
 - **Docker Ready**: Containerized application with Docker and Docker Compose support
 - **Health Check**: Built-in health monitoring endpoint
 - **REST API**: Clean RESTful API with automatic documentation
+- **CORS Enabled**: Cross-origin resource sharing for frontend integration
 
 ## Supported File Formats
 
@@ -37,7 +40,10 @@ cd document-text-extractor
 docker-compose up -d
 ```
 
-3. The API will be available at `http://localhost:8000`
+3. Access the application:
+   - **Web UI**: `http://localhost:8000` - User-friendly interface for document uploads
+   - **API Documentation**: `http://localhost:8000/docs` - Interactive API documentation
+   - **Health Check**: `http://localhost:8000/health` - Service status
 
 ### Manual Installation
 
@@ -67,12 +73,75 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+### Running from PyCharm
+
+**Setup Run Configuration:**
+
+1. Open **Run** → **Edit Configurations...**
+2. Click **+** → **Python**
+3. Configure as follows:
+   - **Name:** `FastAPI - Document Extractor`
+   - **Module name:** (select radio button) → `uvicorn`
+   - **Parameters:** `app.main:app --reload --host 0.0.0.0 --port 8000`
+   - **Working directory:** `/path/to/document-text-extractor`
+   - **Environment variables:** `MAX_FILE_SIZE_MB=50;TESSERACT_CMD=tesseract`
+4. Click **OK** and run with the green play button
+
+**Alternative - Using Script:**
+
+Create `run.py` in the project root:
+
+```python
+import uvicorn
+
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+```
+
+Then set **Script path** to `run.py` in the run configuration.
+
 ## API Documentation
 
 Once the service is running, visit:
 
 - **Interactive API Documentation**: `http://localhost:8000/docs`
 - **Alternative Documentation**: `http://localhost:8000/redoc`
+
+## Web UI
+
+The application includes a user-friendly web interface for easy document text extraction:
+
+### Accessing the Web UI
+
+Open your browser and navigate to:
+
+```
+http://localhost:8000
+```
+
+### Features
+
+- **Drag-and-Drop Upload**: Simply drag your file onto the upload zone or click to browse
+- **Supported Formats Display**: Clear indication of all supported file formats
+- **Client-Side Validation**: Instant feedback on file size and format before upload
+- **Progress Indicator**: Visual feedback during text extraction
+- **Result Display**: View extracted text in a textarea with character count
+- **Copy to Clipboard**: One-click copy of extracted text
+- **Download as TXT**: Save extracted text as a text file
+- **Specific Error Messages**: Clear error feedback for troubleshooting
+
+### Supported Formats
+
+The Web UI supports the following file types:
+
+- **PDF**: `.pdf`
+- **Office Documents**: `.docx`, `.xlsx`, `.pptx`
+- **Images**: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`
+
+### File Size Limits
+
+- **Default Maximum Size**: 50 MB
+- **Configurable**: Can be adjusted via environment variable (see Configuration section)
 
 ## API Endpoints
 
@@ -162,9 +231,10 @@ with open('document.pdf', 'rb') as f:
 ```
 document-text-extractor/
 ├── app/
-│   ├── main.py          # FastAPI application and endpoints
-│   ├── routers.py       # Additional route definitions (if any)
-│   └── utils.py         # Utility functions (if any)
+│   └── main.py          # FastAPI application and endpoints
+├── static/
+│   ├── index.html       # Web UI interface
+│   └── app.js          # Client-side JavaScript logic
 ├── docker-compose.yml   # Docker Compose configuration
 ├── Dockerfile          # Docker image definition
 ├── requirements.txt    # Python dependencies
@@ -193,17 +263,42 @@ document-text-extractor/
 ### Environment Variables
 
 - `TESSERACT_CMD`: Path to Tesseract executable (default: "tesseract")
+- `MAX_FILE_SIZE_MB`: Maximum allowed file size in megabytes (default: "50")
+
+### Customizing File Size Limit
+
+To change the maximum file size limit, modify the `docker-compose.yml` file:
+
+```yaml
+environment:
+  TESSERACT_CMD: "/usr/bin/tesseract"
+  MAX_FILE_SIZE_MB: "100"  # Change to desired size in MB
+```
+
+Or set it when running manually:
+
+```bash
+export MAX_FILE_SIZE_MB=100
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
 
 ### Docker Configuration
 
 The application is configured to run on port 8000. You can modify the port mapping in [`docker-compose.yml`](docker-compose.yml) if needed.
+
+**Volume Mounts:**
+- `./app:/app/app` - Application code
+- `./static:/app/static` - Web UI files
 
 ## Error Handling
 
 The API provides comprehensive error handling:
 
 - **400 Bad Request**: Invalid file format or corrupted files
+- **413 Payload Too Large**: File size exceeds the configured maximum limit
 - **500 Internal Server Error**: Processing errors with detailed error messages
+
+The Web UI provides user-friendly error messages for all error scenarios.
 
 ## Performance Considerations
 
@@ -215,9 +310,15 @@ The API provides comprehensive error handling:
 
 ### Running in Development Mode
 
+**Terminal:**
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+**PyCharm:**
+- Use the run configuration setup described in the "Running from PyCharm" section
+- Ensure your Python interpreter has all dependencies from `requirements.txt` installed
+- The `--reload` flag enables auto-reload on code changes
 
 ### Adding New File Formats
 

@@ -6,6 +6,8 @@ services:
       - "8000:8000"
     environment:
       TESSERACT_CMD: "/usr/bin/tesseract"
+      MAX_FILE_SIZE_MB: "50"
     volumes:
       - ./app:/app/app
+      - ./static:/app/static
     restart: unless-stopped
