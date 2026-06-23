@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 pytesseract
+easyocr
 pillow
 pdfplumber
 python-multipart

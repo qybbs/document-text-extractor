@@ -23,6 +23,8 @@ const copyBtn = document.getElementById('copyBtn');
 const downloadBtn = document.getElementById('downloadBtn');
 const extractAnotherBtn = document.getElementById('extractAnotherBtn');
 const maxFileSizeDisplay = document.getElementById('maxFileSize');
+const ocrModeSection = document.getElementById('ocrModeSection');
+const ocrMode = document.getElementById('ocrMode');
 
 // Supported formats
 const SUPPORTED_FORMATS = {
@@ -115,6 +117,7 @@ function showFileInfo(file) {
     uploadPrompt.classList.add('hidden');
     fileInfo.classList.remove('hidden');
     extractBtn.classList.remove('hidden');
+    toggleOcrMode(file);
 }
 
 // Reset upload zone
@@ -125,7 +128,18 @@ function resetUploadZone() {
     fileInfo.classList.add('hidden');
     extractBtn.classList.add('hidden');
     resultCard.classList.add('hidden');
+    ocrModeSection.classList.add('hidden');
     hideError();
+}
+
+// Toggle OCR mode selector for image files
+function toggleOcrMode(file) {
+    const ext = getFileExtension(file.name);
+    if (SUPPORTED_FORMATS.image.includes(ext)) {
+        ocrModeSection.classList.remove('hidden');
+    } else {
+        ocrModeSection.classList.add('hidden');
+    }
 }
 
 // Handle file selection
@@ -150,7 +164,12 @@ async function extractText() {
     extractBtn.disabled = true;
     progressContainer.classList.remove('hidden');
     
-    const endpoint = getEndpointForFile(selectedFile);
+    let endpoint = getEndpointForFile(selectedFile);
+    const ext = getFileExtension(selectedFile.name);
+    if (SUPPORTED_FORMATS.image.includes(ext)) {
+        const mode = (ocrMode.value || 'tesseract').trim().toLowerCase();
+        endpoint = `${endpoint}?mode=${encodeURIComponent(mode)}`;
+    }
     const formData = new FormData();
     formData.append('file', selectedFile);
     
@@ -204,8 +223,27 @@ function displayResult(text) {
 
 // Copy to clipboard
 async function copyToClipboard() {
+    const textToCopy = resultText.value || '';
+    if (!textToCopy) {
+        showError('Nothing to copy yet');
+        return;
+    }
+
     try {
-        await navigator.clipboard.writeText(resultText.value);
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(textToCopy);
+        } else {
+            resultText.removeAttribute('readonly');
+            resultText.select();
+            resultText.setSelectionRange(0, textToCopy.length);
+            const copied = document.execCommand('copy');
+            resultText.setAttribute('readonly', '');
+            resultText.blur();
+            if (!copied) {
+                throw new Error('execCommand failed');
+            }
+        }
+
         const originalText = copyBtn.innerHTML;
         copyBtn.innerHTML = `
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -215,7 +253,7 @@ async function copyToClipboard() {
         `;
         copyBtn.classList.add('bg-green-100', 'text-green-700');
         copyBtn.classList.remove('bg-gray-100', 'text-gray-700');
-        
+
         setTimeout(() => {
             copyBtn.innerHTML = originalText;
             copyBtn.classList.remove('bg-green-100', 'text-green-700');

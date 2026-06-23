@@ -1,8 +1,9 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import pytesseract
+import easyocr
 from PIL import Image
 import pdfplumber
 import io
@@ -10,6 +11,7 @@ import os
 from docx import Document
 import openpyxl
 from pptx import Presentation
+from threading import Lock
 
 app = FastAPI(title="Document Text Extractor API")
 
@@ -23,6 +25,10 @@ app.add_middleware(
 )
 
 pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_CMD", "tesseract")
+
+# EasyOCR reader is expensive to initialize, so cache it.
+_easyocr_reader = None
+_easyocr_lock = Lock()
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -95,16 +101,29 @@ async def extract_pdf(file: UploadFile = Depends(validate_file_size)):
 
 
 @app.post("/extract/image")
-async def extract_image(file: UploadFile = Depends(validate_file_size)):
+async def extract_image(
+    file: UploadFile = Depends(validate_file_size),
+    mode: str = Query("tesseract", description="OCR mode: tesseract or easyocr"),
+):
     if file.content_type not in [
         "image/jpeg", "image/png", "image/jpg", "image/gif", "image/webp"
     ]:
         raise HTTPException(status_code=400, detail="Invalid image format")
 
+    mode = mode.strip().lower()
+    if mode not in {"tesseract", "easyocr"}:
+        raise HTTPException(status_code=400, detail="Invalid OCR mode")
+
     try:
         img_bytes = await file.read()
         img = Image.open(io.BytesIO(img_bytes))
-        text = pytesseract.image_to_string(img, lang="eng")
+        if mode == "tesseract":
+            text = pytesseract.image_to_string(img, lang="ind")
+        else:
+            reader = get_easyocr_reader()
+            text = "\n".join(reader.readtext(img_bytes, detail=0, paragraph=True))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 
@@ -161,3 +180,13 @@ def extract_pptx(file_obj: io.BytesIO) -> str:
             if hasattr(shape, "text") and shape.text.strip():
                 text.append(shape.text)
     return "\n".join(text)
+
+
+def get_easyocr_reader() -> easyocr.Reader:
+    """Create or reuse EasyOCR reader for image extraction."""
+    global _easyocr_reader
+    if _easyocr_reader is None:
+        with _easyocr_lock:
+            if _easyocr_reader is None:
+                _easyocr_reader = easyocr.Reader(["id", "en"], gpu=False)
+    return _easyocr_reader
