@@ -1,6 +1,11 @@
 services:
   document-extractor:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_EASYOCR: "${INSTALL_EASYOCR:-false}"
+        USE_GPU: "${USE_GPU:-false}"
+    image: document-extractor:latest
     container_name: document-extractor
     ports:
       - "8000:8000"

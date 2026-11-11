@@ -40,6 +40,7 @@ async function init() {
         const config = await response.json();
         maxFileSizeBytes = config.max_file_size_bytes;
         maxFileSizeDisplay.textContent = `${config.max_file_size_mb} MB`;
+        applyEasyOcrAvailability(config.easyocr_available !== false);
     } catch (error) {
         console.error('Failed to fetch config:', error);
         showError('Failed to connect to the API. Please make sure the server is running.');
@@ -130,6 +131,23 @@ function resetUploadZone() {
     resultCard.classList.add('hidden');
     ocrModeSection.classList.add('hidden');
     hideError();
+}
+
+// Disable the EasyOCR option when the build has no easyocr installed
+function applyEasyOcrAvailability(available) {
+    const easyOption = ocrMode.querySelector('option[value="easyocr"]');
+    if (!easyOption) return;
+
+    if (available) {
+        easyOption.disabled = false;
+        easyOption.textContent = 'EasyOCR';
+    } else {
+        easyOption.disabled = true;
+        easyOption.textContent = 'EasyOCR (not available in this build)';
+        if (ocrMode.value === 'easyocr') {
+            ocrMode.value = 'tesseract';
+        }
+    }
 }
 
 // Toggle OCR mode selector for image files
