@@ -3,11 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import pytesseract
-import easyocr
 from PIL import Image
 import pdfplumber
 import io
 import os
+import importlib.util
 from docx import Document
 import openpyxl
 from pptx import Presentation
@@ -29,6 +29,9 @@ pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_CMD", "tesseract")
 # EasyOCR reader is expensive to initialize, so cache it.
 _easyocr_reader = None
 _easyocr_lock = Lock()
+
+# easyocr is an optional dependency (lean builds skip it to shrink image size).
+EASYOCR_AVAILABLE = importlib.util.find_spec("easyocr") is not None
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -72,7 +75,8 @@ async def get_config():
     """Get configuration settings"""
     return {
         "max_file_size_bytes": MAX_FILE_SIZE_BYTES,
-        "max_file_size_mb": MAX_FILE_SIZE_MB
+        "max_file_size_mb": MAX_FILE_SIZE_MB,
+        "easyocr_available": EASYOCR_AVAILABLE
     }
 
 
@@ -182,11 +186,22 @@ def extract_pptx(file_obj: io.BytesIO) -> str:
     return "\n".join(text)
 
 
-def get_easyocr_reader() -> easyocr.Reader:
-    """Create or reuse EasyOCR reader for image extraction."""
+def get_easyocr_reader():
+    """Create or reuse EasyOCR reader for image extraction.
+
+    easyocr is an optional dependency (image built without INSTALL_EASYOCR=true
+    won't have it). Import lazily so the rest of the API still works.
+    """
     global _easyocr_reader
     if _easyocr_reader is None:
         with _easyocr_lock:
             if _easyocr_reader is None:
+                try:
+                    import easyocr
+                except ImportError:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="easyocr not installed in this build; use mode=tesseract or rebuild with INSTALL_EASYOCR=true",
+                    )
                 _easyocr_reader = easyocr.Reader(["id", "en"], gpu=False)
     return _easyocr_reader
